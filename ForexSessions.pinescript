@@ -1,0 +1,786 @@
+//@version=5
+indicator(title="Forex Sessions", shorttitle = "FX Sessions", overlay=true)
+
+// InSession returns 'true' when the current bar happens inside
+// the specified session, corrected for the given time zone (optional).
+// Returns 'false' when the bar doesn't happen in that time period,
+// or when the chart's time frame is 1 day or higher. 
+InSession(sessionTime, sessionTimeZone=syminfo.timezone) =>
+    not na(time(timeframe.period, sessionTime, sessionTimeZone))
+
+// remove deletes data from string
+remove(str, pos, length) =>
+    // 0..n-1
+    arr = str.split(str, "")
+
+    // n
+    len = array.size(arr)
+
+    pos1 = pos >= 0 ? pos : len + pos
+    length_ = length >= 0 ? length : len - pos1
+    // end_pos + 1 - not including pos2
+    pos2 = pos1 + length_
+
+    // arr is not empty, length > 0
+    if len > 0 and length_ > 0 and pos1 >= 0 and pos2 <= len
+        // insert each char of target as consecutive string into str after pos
+        for i = 0 to length_ - 1
+            array.remove(arr, pos1)
+            // this also works
+            // array.set(arr, pos1 + i, "")
+
+    res = array.join(arr, "")
+
+//CalcOffs calculates session length in minutes
+CalcOffs(timeStr) =>
+    hourStartStr = remove(timeStr, 2, 7) 
+    hourStart    = str.tonumber(hourStartStr)
+    
+    minStartTemp = remove(timeStr, 0, 2)
+    minStartStr     = remove(minStartTemp, 2, 5)
+    minStart = str.tonumber(minStartStr)
+
+    timeEndStr = remove(timeStr, 0, 5)
+    hourEndStr = remove(timeEndStr, 2, 2) 
+    hourEnd    = str.tonumber(hourEndStr)
+    minEndStr  = remove(timeEndStr, 0, 2)
+    minEnd     = str.tonumber(minEndStr)
+
+    time_diff_minutes = str.tostring(math.abs((hourEnd * 60 + minEnd) - (hourStart * 60 + minStart)))
+// Settings
+//general
+sessionZone     = input.string("UTC+3", title="Session time zone", group = "General")
+isShowPips      = input.bool(false, title = "Show Pips for sessions", group = "General")
+isHideHistory   = input.bool(true, title = "Hide Historical data", group = "General")
+
+//appearance
+textAlignInp    = input.string(defval="left", title = "Text Align", options=["left", "center", "right"], group = "Appearance")
+textSizeInp     = input.string(defval="small", title="Text Size", options =["tiny", "small", "normal", "large", "huge"], group = "Appearance")
+borderAndLines  = input.string(defval="borders", title="Borders and Lines", options =["hi/lo lines", "borders", "borders and lines", "nothing"], group = "Appearance")
+borderSize      = input.int(0, title="Box border size", minval=0, group = "Appearance")
+borderStyleInp  = input.string(defval="solid", title = "Border Style", options=["solid", "dotted", "dashed"], group = "Appearance")
+lineSize        = input.int(2, title="Hi/Lo lines size", minval=0, group = "Appearance")
+
+//NYM
+iMDisplay = input.bool    (true, "Show New York Midnight", group="New York Midnight Open")
+iMLabel   = input.bool    (true, "Show Label", group="New York Midnight Open")
+iMStyle   = input.string  ("Solid", "Line Style", options=["Solid", "Dotted", "Dashed"], group="New York Midnight Open")
+iMColor   = input.color   (color.rgb(0, 0, 0, 50), "Color", group="New York Midnight Open")
+tMidnight = time("1", '0000-0001:1234567')
+
+//PDL/PDH
+isPdlPdh        = input.bool(true, title = "Show PDL/PDH", group = "PDL/PDH")
+isPdlInfo       = input.bool(true, title = "Show price info", group = "PDL/PDH")
+pdSessionTime   = input.session("0001-2359", title="Timezone for PDL/PDH",  group ="PDL/PDH")
+pdLineStyleInp = input.string(defval="dotted", title = "Line Style", options=["solid", "dotted", "dashed"], group = "PDL/PDH")
+pdLineSize     = input.int(1, title="Line size", minval=0, group = "PDL/PDH")
+pdLineColor     = input.color(color.rgb(120, 123, 134), title="Line color", group = "PDL/PDH")
+pdLabelColor    = input.color(color.rgb(120, 123, 134), title="Text color",  group = "PDL/PDH")
+
+//London
+isLondon        = input.bool(true, title = "Show London Session", group = "London Session")
+loSessionTime   = input.session("1000-1500", title="London Session time", group = "London Session")
+loBoxColor      = input.color(color.new(#4caf4f, 92), title="Background color", group = "London Session")
+loBorderColor   = input.color(color.green, title="Border color", group = "London Session")
+loLineColor     = input.color(color.green, title="Line color", group = "London Session")
+loLabelColor    = input.color(color.green, title="Text color", group = "London Session")
+
+//Asia
+isAsia          = input.bool(true, title = "Show Asia Session", group = "Asia Session")
+asSessionTime   = input.session("0200-1000", title="Asia Session time", group = "Asia Session")
+asBoxColor      = input.color(color.new(#9598a1, 92), title="Background color", group = "Asia Session")
+asBorderColor   = input.color(color.rgb(149, 152, 161), title="Border color", group = "Asia Session")
+asLineColor     = input.color(color.rgb(149, 152, 161), title="Line color", group = "Asia Session")
+asLabelColor    = input.color(color.rgb(149, 152, 161), title="Text color", group = "Asia Session")
+
+//Frankfurt
+isFrankfurt     = input.bool(true, title = "Show Frankfurt Session", group = "Frankfurt Session")
+frSessionTime   = input.session("0900-1000", title="Frankfurt Session time",  group = "Frankfurt Session")
+frBoxColor      = input.color(color.new(#5b9cf6, 92), title="Background color",  group = "Frankfurt Session")
+frBorderColor   = input.color(color.rgb(91, 156, 246), title="Border color",  group = "Frankfurt Session")
+frLineColor     = input.color(color.rgb(91, 156, 246), title="Line color", group = "Frankfurt Session")
+frLabelColor    = input.color(color.rgb(91, 156, 246, 100), title="Text color",  group = "Frankfurt Session")
+
+//New York
+isNewYork       = input.bool(true, title = "Show New York Session", group = "New York Session")
+nySessionTime   = input.session("1500-2300", title="New York Session time",  group ="New York Session")
+nyBoxColor      = input.color(color.new(#683ab7, 92), title="Background color",  group = "New York Session")
+nyBorderColor   = input.color(color.rgb(103, 58, 183), title="Border color",  group = "New York Session")
+nyLineColor     = input.color(color.rgb(103, 58, 183), title="Line color", group = "New York Session")
+nyLabelColor    = input.color(color.rgb(103, 58, 183), title="Text color",  group = "New York Session")
+
+
+// Apply styles
+borderStyle = borderStyleInp == "dotted" ? line.style_dotted : borderStyleInp == "dashed" ? line.style_dashed : line.style_solid
+textSize = textSizeInp == "tiny" ? size.tiny : textSizeInp == "normal" ? size.normal : textSizeInp == "large" ? size.large : textSizeInp == "huge" ? size.huge : size.small
+textAlign = textAlignInp == "center" ? text.align_center : textAlignInp == "right" ? text.align_right : text.align_left
+pdLineStyle = pdLineStyleInp == "dotted" ? line.style_dotted : pdLineStyleInp == "dashed" ? line.style_dashed : line.style_solid
+_MStyle   = iMStyle ==    "Solid" ? line.style_solid : iMStyle == "Dotted" ? line.style_dotted : line.style_dashed
+if borderAndLines == "hi/lo lines"
+    borderSize := 0
+
+if borderAndLines == "borders"
+    lineSize := 0
+
+if borderAndLines == "nothing"
+    lineSize := 0
+    borderSize := 0
+
+//define offsets in minutes
+loOffs = math.round(str.tonumber(CalcOffs(loSessionTime)))
+asOffs = math.round(str.tonumber(CalcOffs(asSessionTime)))
+frOffs = math.round(str.tonumber(CalcOffs(frSessionTime)))
+nyOffs = math.round(str.tonumber(CalcOffs(nySessionTime)))
+dayOffs = 1440
+//diff offsets for diff timeframes
+if timeframe.period == "S"
+    loOffs := loOffs * 60
+    asOffs := asOffs * 60
+    frOffs := frOffs * 60
+    nyOffs := nyOffs * 60
+    dayOffs := dayOffs * 60
+
+if timeframe.period == "5S"
+    loOffs := loOffs * 60 / 5
+    asOffs := asOffs * 60 / 5
+    frOffs := frOffs * 60 / 5
+    nyOffs := nyOffs * 60 / 5
+    dayOffs := dayOffs * 60 / 5
+
+if timeframe.period == "15S"
+    loOffs := loOffs * 60 / 15
+    asOffs := asOffs * 60 / 15
+    frOffs := frOffs * 60 / 15
+    nyOffs := nyOffs * 60 / 15
+    dayOffs := dayOffs * 60 / 15
+
+if timeframe.period == "30S"
+    loOffs := loOffs * 60 / 30
+    asOffs := asOffs * 60 / 30
+    frOffs := frOffs * 60 / 30
+    nyOffs := nyOffs * 60 / 30
+    dayOffs := dayOffs * 60 / 30
+
+if timeframe.period == "3"
+    loOffs := loOffs / 3
+    asOffs := asOffs / 3
+    frOffs := frOffs / 3
+    nyOffs := nyOffs / 3
+    dayOffs := dayOffs / 3
+
+if timeframe.period == "5"
+    loOffs := loOffs / 5
+    asOffs := asOffs / 5
+    frOffs := frOffs / 5
+    nyOffs := nyOffs / 5
+    dayOffs := dayOffs / 5
+
+if timeframe.period == "15"
+    loOffs := loOffs / 15
+    asOffs := asOffs / 15
+    frOffs := frOffs / 15
+    nyOffs := nyOffs / 15
+    dayOffs := dayOffs / 15
+
+if timeframe.period == "30"
+    loOffs := loOffs / 30
+    asOffs := asOffs / 30
+    frOffs := frOffs / 30
+    nyOffs := nyOffs / 30
+    dayOffs := dayOffs / 30
+
+if timeframe.period == "45"
+    loOffs := loOffs / 45
+    asOffs := asOffs / 45
+    frOffs := frOffs / 45
+    nyOffs := nyOffs / 45
+    dayOffs := dayOffs / 45
+
+if timeframe.period == "60"
+    loOffs := loOffs / 60
+    asOffs := asOffs / 60
+    frOffs := frOffs / 60
+    nyOffs := nyOffs / 60
+    dayOffs := dayOffs / 60
+
+if timeframe.period == "120"
+    loOffs := loOffs / 120
+    asOffs := asOffs / 120
+    frOffs := frOffs / 120
+    nyOffs := nyOffs / 120
+    dayOffs := dayOffs / 120
+
+if timeframe.period == "180"
+    loOffs := loOffs / 180
+    asOffs := asOffs / 180
+    frOffs := frOffs / 180
+    nyOffs := nyOffs / 180
+    dayOffs := dayOffs / 180
+
+if timeframe.period == "240"
+    loOffs := loOffs / 240
+    asOffs := asOffs / 240
+    frOffs := frOffs / 240
+    nyOffs := nyOffs / 240
+    dayOffs := dayOffs / 240
+//Check if time is today
+isToday = false
+if year(timenow, sessionZone) == year(time, sessionZone) and month(timenow, sessionZone) == month(time, sessionZone) and dayofmonth(time, sessionZone) == dayofmonth(timenow, sessionZone)
+    isToday := true
+//Chech if time is yesterday
+isYesterday = false
+if year(timenow, sessionZone) == year(time, sessionZone) and month(timenow, sessionZone) == month(time, sessionZone) and dayofmonth(time, sessionZone) == dayofmonth(timenow, sessionZone)-1
+    isYesterday := true
+
+//Draw indicator for all time
+if isHideHistory == false
+    if isLondon
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "London"
+        // See if the session is currently active and just started
+        inSession    = InSession(loSessionTime, sessionZone) and timeframe.isintraday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+loOffs, bottom=na,
+                 border_width=borderSize, bgcolor=loBoxColor, border_color=loBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+loOffs, y2 = na, color = loLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+loOffs, y2 = na, color = loLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+loOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = loLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize)
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+        
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice)
+            if isShowPips
+                info := "London ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isAsia
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "Asia"
+        // See if the session is currently active and just started
+        inSession    = InSession(asSessionTime, sessionZone) and timeframe.isintraday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+asOffs, bottom=na, border_width=borderSize, bgcolor=asBoxColor, border_color=asBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+asOffs, y2 = na, color = asLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+asOffs, y2 = na, color = asLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+asOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = asLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            if isShowPips
+                info := "Asia ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isFrankfurt
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "Frankfurt"
+        // See if the session is currently active and just started
+        inSession    = InSession(frSessionTime, sessionZone) and timeframe.isintraday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+frOffs, bottom=na, border_width=borderSize, bgcolor=frBoxColor, border_color=frBorderColor, border_style=borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+frOffs, y2 = na, color = frLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+frOffs, y2 = na, color = frLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+frOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = frLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            if isShowPips
+                info := "Frankfurt ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isNewYork
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "New York"
+        // See if the session is currently active and just started
+        inSession    = InSession(nySessionTime, sessionZone) and timeframe.isintraday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+nyOffs, bottom=na, border_width=borderSize, bgcolor=nyBoxColor, border_color=nyBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+nyOffs, y2 = na, color = nyBorderColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+nyOffs, y2 = na, color = nyBorderColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+nyOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = nyLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            box.set_right(sessionInfo, bar_index + 1)
+            if isShowPips
+                info := "New York ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+    
+    if isPdlPdh
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionHiInfo = na
+        var box sessionLoInfo = na
+        var string loInfo = ""
+        var string hiInfo = ""
+        // See if the session is currently active and just started
+        inSession    = InSession(pdSessionTime, sessionZone) and timeframe.isintraday and not isToday
+        sessionStart = inSession and not inSession[1] 
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = na, y2 = na, color = pdLineColor, style = pdLineStyle, width = pdLineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = na, y2 = na, color = pdLineColor, style = pdLineStyle, width = pdLineSize)
+            if isPdlInfo
+                sessionHiInfo := box.new(left=bar_index, top=na, right=na, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = hiInfo, text_color = pdLabelColor, text_halign = text.align_right, text_valign = text.align_bottom, text_size = textSize)
+                sessionLoInfo := box.new(left=bar_index, top=na, right=na, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = loInfo, text_color = pdLabelColor, text_halign = text.align_right, text_valign = text.align_top, text_size = textSize)
+
+        // During the session, update that session's existing box
+        if inSession
+            if isPdlInfo
+                box.set_top(sessionHiInfo, sessionHighPrice)
+                box.set_bottom(sessionHiInfo, sessionHighPrice)
+                box.set_right(sessionHiInfo, bar_index+1 + dayOffs)
+        
+                box.set_top(sessionLoInfo, sessionLowPrice)
+                box.set_bottom(sessionLoInfo, sessionLowPrice)
+                box.set_right(sessionLoInfo, bar_index+1 + dayOffs)
+                loInfo := "PDL: " + str.tostring(math.round(sessionLowPrice, 4))
+                hiInfo := "PDH: " + str.tostring(math.round(sessionHighPrice, 4))
+                box.set_text(sessionLoInfo, loInfo)
+                box.set_text(sessionHiInfo, hiInfo)
+            
+
+            line.set_y1(sessionTopLine, sessionHighPrice)
+            line.set_y2(sessionTopLine, sessionHighPrice)
+            line.set_x2(sessionTopLine, bar_index+1+dayOffs)
+
+            line.set_y1(sessionLowLine, sessionLowPrice)
+            line.set_y2(sessionLowLine, sessionLowPrice)
+            line.set_x2(sessionLowLine, bar_index+1+dayOffs)
+
+//Draw indicator only for today
+if isHideHistory == true
+    if isLondon
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "London"
+        // See if the session is currently active and just started
+        inSession    = InSession(loSessionTime, sessionZone) and timeframe.isintraday and isToday
+        sessionStart = inSession and not inSession[1] 
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+loOffs, bottom=na,
+                 border_width=borderSize, bgcolor=loBoxColor, border_color=loBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+loOffs, y2 = na, color = loLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+loOffs, y2 = na, color = loLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+loOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = loLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize)
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+        
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice)
+            if isShowPips
+                info := "London ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isAsia
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionBox = na
+        var box sessionInfo = na
+        var string info = "Asia"
+        // See if the session is currently active and just started
+        inSession    = InSession(asSessionTime, sessionZone) and timeframe.isintraday and isToday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+asOffs, bottom=na, border_width=borderSize, bgcolor=asBoxColor, border_color=asBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+asOffs, y2 = na, color = asLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+asOffs, y2 = na, color = asLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+asOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = asLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            if isShowPips
+                info := "Asia ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isFrankfurt
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "Frankfurt"
+        // See if the session is currently active and just started
+        inSession    = InSession(frSessionTime, sessionZone) and timeframe.isintraday and isToday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+frOffs, bottom=na, border_width=borderSize, bgcolor=frBoxColor, border_color=frBorderColor, border_style=borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+frOffs, y2 = na, color = frLineColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+frOffs, y2 = na, color = frLineColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+frOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = frLabelColor, text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            if isShowPips
+                info := "Frankfurt ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+
+    if isNewYork
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var sessionOpenPrice = 0.0
+        var box sessionBox = na
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionInfo = na
+        var string info = "New York"
+        // See if the session is currently active and just started
+        inSession    = InSession(nySessionTime, sessionZone) and timeframe.isintraday and isToday
+        sessionStart = inSession and not inSession[1]
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+            sessionOpenPrice := open
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionBox := box.new(left=bar_index, top=na, right=bar_index+nyOffs, bottom=na, border_width=borderSize, bgcolor=nyBoxColor, border_color=nyBorderColor, border_style = borderStyle)
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+nyOffs, y2 = na, color = nyBorderColor, style = line.style_solid, width = lineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = bar_index+nyOffs, y2 = na, color = nyBorderColor, style = line.style_solid, width = lineSize)
+            sessionInfo := box.new(left=bar_index, top=na, right=bar_index+nyOffs, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = info, text_color = nyLabelColor , text_halign = textAlign, text_valign = text.align_bottom, text_size = textSize) 
+
+        // During the session, update that session's existing box
+        if inSession
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            box.set_top(sessionInfo, sessionHighPrice)
+            box.set_bottom(sessionInfo, sessionHighPrice+ta.tr/2)
+            if isShowPips
+                info := "New York ● " + str.tostring((sessionHighPrice-sessionLowPrice) * 10000) + " pips"
+            box.set_text(sessionInfo, info)
+            box.set_top(sessionBox, sessionHighPrice)
+            box.set_bottom(sessionBox, sessionLowPrice)
+
+            if lineSize > 0
+                line.set_y1(sessionTopLine, sessionHighPrice)
+                line.set_y2(sessionTopLine, sessionHighPrice)
+
+                line.set_y1(sessionLowLine, sessionLowPrice)
+                line.set_y2(sessionLowLine, sessionLowPrice)
+    
+    if isPdlPdh
+        // Create variables
+        var sessionHighPrice = 0.0
+        var sessionLowPrice  = 0.0
+        var line sessionTopLine = na
+        var line sessionLowLine = na
+        var box sessionHiInfo = na
+        var box sessionLoInfo = na
+        var string loInfo = ""
+        var string hiInfo = ""
+        // See if the session is currently active and just started
+        inSession    = InSession(pdSessionTime, sessionZone) and timeframe.isintraday and isYesterday
+        sessionStart = inSession and not inSession[1] 
+
+        // When a new session starts, set the session high and low to the data
+        // of the bar in the session.
+        if sessionStart
+            sessionHighPrice := high
+            sessionLowPrice  := low
+        // Else, during the session, track the highest high and lowest low
+        else if inSession
+            sessionHighPrice := math.max(sessionHighPrice, high)
+            sessionLowPrice  := math.min(sessionLowPrice, low)
+
+        // When a session begins, make a new box for that session
+        if sessionStart
+            sessionTopLine := line.new(x1= bar_index, y1 = na, x2 = na, y2 = na, color = pdLineColor, style = pdLineStyle, width = pdLineSize)
+            sessionLowLine := line.new(x1= bar_index, y1 = na, x2 = na, y2 = na, color = pdLineColor, style = pdLineStyle, width = pdLineSize)
+            if isPdlInfo
+                sessionHiInfo := box.new(left=bar_index, top=na, right=na, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = hiInfo, text_color = pdLabelColor, text_halign = text.align_right, text_valign = text.align_bottom, text_size = textSize)
+                sessionLoInfo := box.new(left=bar_index, top=na, right=na, bottom=na, border_width=0, bgcolor=color.new(#ffffff, 100), text = loInfo, text_color = pdLabelColor, text_halign = text.align_right, text_valign = text.align_top, text_size = textSize)
+
+        // During the session, update that session's existing box
+        if inSession
+            if isPdlInfo
+                box.set_top(sessionHiInfo, sessionHighPrice)
+                box.set_bottom(sessionHiInfo, sessionHighPrice)
+                box.set_right(sessionHiInfo, bar_index+1+dayOffs)
+        
+                box.set_top(sessionLoInfo, sessionLowPrice)
+                box.set_bottom(sessionLoInfo, sessionLowPrice)
+                box.set_right(sessionLoInfo, bar_index+1+dayOffs)
+                loInfo := "PDL: " + str.tostring(math.round(sessionLowPrice, 4))
+                hiInfo := "PDH: " + str.tostring(math.round(sessionHighPrice, 4))
+                box.set_text(sessionLoInfo, loInfo)
+                box.set_text(sessionHiInfo, hiInfo)
+            
+            line.set_y1(sessionTopLine, sessionHighPrice)
+            line.set_y2(sessionTopLine, sessionHighPrice)
+            line.set_x2(sessionTopLine, bar_index+1+dayOffs)
+
+            line.set_y1(sessionLowLine, sessionLowPrice)
+            line.set_y2(sessionLowLine, sessionLowPrice)
+            line.set_x2(sessionLowLine, bar_index+1+dayOffs)
+
+
+
+
+//Midnight Open
+if iMDisplay
+    var openMidnight  = 0.0
+    if tMidnight
+        if not tMidnight[1]
+            openMidnight  := open
+        else
+            openMidnight := math.max(open, openMidnight)
+
+    var label lb = na
+    var line lne = na
+    if openMidnight != openMidnight[1]
+        if barstate.isconfirmed
+            line.set_x2(lne, tMidnight)
+            lne := line.new(tMidnight, openMidnight, last_bar_time + 14400000/2, openMidnight, xloc.bar_time, extend.none, iMColor, _MStyle, 1)
+            if iMLabel
+                lb  := label.new(last_bar_time + 14400000/2, openMidnight, "NYM", xloc.bar_time, yloc.price, na, label.style_none, iMColor, size.normal, text.align_right)
+            label.delete(lb[1])
+            if isHideHistory
+                line.delete(lne[1])
+
